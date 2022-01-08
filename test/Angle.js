@@ -6,6 +6,7 @@
 // We import Chai to use its asserting functions here.
 const { expect } = require("chai")
 const { ethers } = require('hardhat')
+const { bytecode } = require('../artifacts/contracts/adapters/Angle/AgEurAdapterView.sol/AgEurAdapterView.json');
 
 // `describe` is a Mocha function that allows you to organize your tests. It's
 // not actually needed, but having your tests organized makes debugging them
@@ -24,10 +25,13 @@ describe("Forex contract", function () {
   // A common pattern is to declare some variables, and assign them in the
   // `before` and `beforeEach` callbacks.
 
-  let forex
+  let forex, lpAdapter
   let owner
   let ibEurWhale
+  let ibEurLPWhale
+  let susdWhale
   let ibEur
+  let ibEurLP
   let ibKrw
   let susd
 
@@ -35,6 +39,16 @@ describe("Forex contract", function () {
   const ibEurAddress = '0x96E61422b6A9bA0e068B6c5ADd4fFaBC6a4aae27'
   const ibKRWAddress = '0x95dfdc8161832e4ff7816ac4b6367ce201538253'
   const susdAddress = '0x57Ab1ec28D129707052df4dF418D58a2D46d5f51'
+  const ibEurLPWhaleAddress = '0xFFb57364d63D5C5cf299D12Fa73cfabEFc301Dc4'
+  const susdWhaleAddress = '0xbc3569a03af09f92a9b07e4845fa809dbdc6adfe'
+  const ibEurLPAddress = '0x19b080FE1ffA0553469D20Ca36219F17Fcf03859'
+
+  const poolManagers = {
+    dai: '0xc9daabc677f3d1301006e723bd21c60be57a5915',
+    usdc: '0xe9f183FC656656f1F17af1F2b0dF79b8fF9ad8eD',
+    fei: '0x53b981389Cfc5dCDA2DC2e903147B5DD0E985F44',
+    frax: '0x6b4eE7352406707003bC6f6b96595FD35925af48',
+  }
 
 
   // `beforeEach` will run before each test, re-deploying the contract every
@@ -42,7 +56,9 @@ describe("Forex contract", function () {
   before(async function () {
     // Get the ContractFactory and Signers here.
     const Forex = await ethers.getContractFactory("SynthIBForex")
+    const LPAdapter = await ethers.getContractFactory("LPAdapter")
     ibEur = await ethers.getContractAt("IERC20", ibEurAddress)
+    ibEurLP = await ethers.getContractAt("IERC20", ibEurLPAddress)
     susd = await ethers.getContractAt("IERC20", susdAddress)
     ibKrw = await ethers.getContractAt("IERC20", ibKRWAddress)
 
@@ -51,55 +67,32 @@ describe("Forex contract", function () {
     forex = await Forex.deploy()
     await forex.deployed()
 
+    lpAdapter = await LPAdapter.deploy(forex.address)
+    await lpAdapter.deployed()
 
     await ethers.provider.send("hardhat_setBalance", [ibEurWhaleAddress, '0x3635c9adc5dea00000' /* 1000Ether */]);
+    await ethers.provider.send("hardhat_setBalance", [ibEurLPWhaleAddress, '0x3635c9adc5dea00000' /* 1000Ether */]);
     await ethers.provider.send("hardhat_impersonateAccount", [ibEurWhaleAddress])
+    await ethers.provider.send("hardhat_impersonateAccount", [ibEurLPWhaleAddress])
+    await ethers.provider.send("hardhat_impersonateAccount", [susdWhaleAddress])
     ibEurWhale = await ethers.getSigner(ibEurWhaleAddress)
+    ibEurLPWhale = await ethers.getSigner(ibEurLPWhaleAddress)
+    susdWhale = await ethers.getSigner(susdWhaleAddress)
 
     // flush susd balance
-    const balance = await susd.balanceOf(ibEurWhaleAddress);
+    const balance = await susd.balanceOf(ibEurLPWhaleAddress);
     if (BigInt(balance) > 0)
-      await susd.connect(ibEurWhale).transfer(acc1, balance);
-  })
-
-  // You can nest describe calls to create subsections.
-  describe("Deployment", function () {
-    // `it` is another Mocha function. This is the one you use to define your
-    // tests. It receives the test name, and a callback function.
-
-    // If the callback function is async, Mocha will `await` it.
-    it("Should set the right owner", async function () {
-      // Expect receives a value, and wraps it in an assertion objet. These
-      // objects have a lot of utility methods to assert values.
-
-      // This test expects the owner variable stored in the contract to be equal
-      // to our Signer's owner.
-      expect(await forex.gov()).to.equal(owner.address)
-    })
-
-    it("Should add ibKRW", async function () {
-      const sKRW = '0x269895a3df4d73b077fc823dd6da1b95f72aaf9b'
-      const pool = '0x8461A004b50d321CB22B7d034969cE6803911899'
-      await forex.add(ibKRWAddress, sKRW, pool)
-    })
+      await susd.connect(ibEurLPWhale).transfer(acc1, balance);
   })
 
   describe("Exchange", function () {
-    it("Should swap ibeur to susd", async function () {
+    it("Should swap dai to agEur", async function () {
+      let inputData = ethers.utils.defaultAbiCoder.encode(["address", "address", "uint256", "address"],[lpAdapter.address, poolManagers.usdc , 1000n * 10n ** 6n, susdAddress]);
+      const payload = bytecode.concat(inputData.slice(2));
 
-      const amountIn = 10_000n * 10n ** 18n
-      const calcOut = await forex.quoteIBToSynth(ibEurAddress, susdAddress, amountIn);
+      const returnedData = await ethers.provider.call({ data: payload, value: 10_000n * 10n ** 18n })
 
-      await ethers.provider.send("hardhat_impersonateAccount", [ibEurWhaleAddress])
-      ibEurWhale = await ethers.getSigner(ibEurWhaleAddress)
-      await ibEur.connect(ibEurWhale).approve(forex.address, ethers.constants.MaxUint256)
-      await forex.connect(ibEurWhale).swapIBToSynth(ibEurAddress, susdAddress, amountIn, 1n)
-      const amountOut = await susd.balanceOf(ibEurWhaleAddress)
-
-      expect(calcOut).to.be.bignumber.equal(amountOut);
-
-      console.log('out: ' + Number(BigInt(amountOut) / 10n ** 16n) / 100)
-      console.log('rate: ' + Number(BigInt(amountOut) * 100n / amountIn) / 100)
+      console.log('out: ' + BigInt(returnedData))
     })
   })
 })

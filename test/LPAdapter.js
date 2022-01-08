@@ -48,10 +48,10 @@ describe("Forex contract", function () {
     // Get the ContractFactory and Signers here.
     const Forex = await ethers.getContractFactory("SynthIBForex")
     const LPAdapter = await ethers.getContractFactory("LPAdapter")
-    ibEur = await ethers.getContractAt("erc20", ibEurAddress)
-    ibEurLP = await ethers.getContractAt("erc20", ibEurLPAddress)
-    susd = await ethers.getContractAt("erc20", susdAddress)
-    ibKrw = await ethers.getContractAt("erc20", ibKRWAddress)
+    ibEur = await ethers.getContractAt("IERC20", ibEurAddress)
+    ibEurLP = await ethers.getContractAt("IERC20", ibEurLPAddress)
+    susd = await ethers.getContractAt("IERC20", susdAddress)
+    ibKrw = await ethers.getContractAt("IERC20", ibKRWAddress)
 
     ;[owner, acc1] = await ethers.getSigners()
 

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import "./interfaces/ISynthIBForex.sol";
+import "./ISynthIBForex.sol";
 
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol';
@@ -31,7 +31,7 @@ interface SynthExchangeViewer {
     );
 }
 
-interface CurvePool {
+interface ICurvePool {
     function get_dy(int128, int128, uint) external view returns (uint);
     function coins(uint) external view returns (address);
     function exchange(int128, int128, uint, uint, address) external returns (uint);
@@ -42,7 +42,6 @@ contract SynthIBForex is ISynthIBForex {
 
     SynthExchanger sex = SynthExchanger(0xDC01020857afbaE65224CfCeDb265d1216064c59);
     SynthExchangeViewer sexViewer = SynthExchangeViewer(0x2A417C61B8062363e4ff50900779463b45d235f6);
-
 
     address public gov = msg.sender;
     // ib-asset to synth analogue
@@ -84,15 +83,16 @@ contract SynthIBForex is ISynthIBForex {
         (amountReceived,,) = sexViewer.getAmountsForAtomicExchange(amount, synthId(synthIn), synthId(synthOut));
     }
 
+    // quote ib to ib
     function quoteIB(address ibIn, address ibOut, uint amount) external view returns (uint amountReceived) {
-        require(ibIn != ibOut, "???");
+        if (ibIn == ibOut) return amount;
         address pool = pools[ibIn];
         (int128 synthIndex, int128 ibIndex) = _getTokenIndexes(pool, ibIn);
-        uint _out = CurvePool(pool).get_dy(ibIndex, synthIndex, amount);
+        uint _out = ICurvePool(pool).get_dy(ibIndex, synthIndex, amount);
         (amountReceived,,) = sexViewer.getAmountsForAtomicExchange(_out, synthId(ibToSynth[ibIn]), synthId(ibToSynth[ibOut]));
         pool = pools[ibOut];
         (synthIndex, ibIndex) = _getTokenIndexes(pool, ibOut);
-        return CurvePool(pool).get_dy(synthIndex, ibIndex, amountReceived);
+        return ICurvePool(pool).get_dy(synthIndex, ibIndex, amountReceived);
     }
 
     // Quote synth to ib
@@ -102,21 +102,21 @@ contract SynthIBForex is ISynthIBForex {
         }
         address pool = pools[ibOut];
         (int128 synthIndex, int128 ibIndex) = _getTokenIndexes(pool, ibOut);
-        return CurvePool(pool).get_dy(synthIndex, ibIndex, amount);
+        return ICurvePool(pool).get_dy(synthIndex, ibIndex, amount);
     }
 
     // Quote ib to synth
     function quoteIBToSynth(address ibIn, address synthOut, uint amount) external view returns (uint amountReceived) {
         address pool = pools[ibIn];
         (int128 synthIndex, int128 ibIndex) = _getTokenIndexes(pool, ibIn);
-        amountReceived = CurvePool(pool).get_dy(ibIndex, synthIndex, amount);
+        amountReceived = ICurvePool(pool).get_dy(ibIndex, synthIndex, amount);
         if (ibToSynth[ibIn] != synthOut) {
             (amountReceived,,) = sexViewer.getAmountsForAtomicExchange(amountReceived, synthId(ibToSynth[ibIn]), synthId(synthOut));
         }
     }
 
     function swapSynth(address synthIn, address synthOut, uint amount, uint minOut) external returns (uint amountReceived) {
-        require(synthIn != synthOut, "???");
+        if (synthIn == synthOut) return amount;
         IERC20(synthIn).safeTransferFrom(msg.sender, address(this), amount);
         amountReceived = sex.exchangeAtomically(synthId(synthIn), amount, synthId(synthOut), "Forex");
         require(amountReceived > minOut, "slippage");
@@ -133,7 +133,9 @@ contract SynthIBForex is ISynthIBForex {
 
         address pool = pools[ibOut];
         (int128 synthIndex, int128 ibIndex) = _getTokenIndexes(pool, ibOut);
-        amountReceived = CurvePool(pool).exchange(synthIndex, ibIndex, amount, minOut, msg.sender);
+        amountReceived = ICurvePool(pool).exchange(synthIndex, ibIndex, amount, 0, address(this));
+        require(amountReceived > minOut, "slippage");
+        IERC20(ibOut).safeTransfer(msg.sender, amountReceived);
     }
 
     // Trade ib to synth
@@ -141,7 +143,7 @@ contract SynthIBForex is ISynthIBForex {
         IERC20(ibIn).safeTransferFrom(msg.sender, address(this), amount);
         address pool = pools[ibIn];
         (int128 synthIndex, int128 ibIndex) = _getTokenIndexes(pool, ibIn);
-        amountReceived = CurvePool(pool).exchange(ibIndex, synthIndex, amount, 0, address(this));
+        amountReceived = ICurvePool(pool).exchange(ibIndex, synthIndex, amount, 0, address(this));
 
         if (ibToSynth[ibIn] != synthOut) {
             amountReceived = sex.exchangeAtomically(synthId(ibToSynth[ibIn]), amountReceived, synthId(synthOut), "Forex");
@@ -153,21 +155,21 @@ contract SynthIBForex is ISynthIBForex {
 
     // Trade ib to ib
     function swapIBToIB(address ibIn, address ibOut, uint amount, uint minOut) external returns (uint amountReceived) {
-        require(ibIn != ibOut, "???");
+        if (ibIn == ibOut) return amount;
         IERC20(ibIn).safeTransferFrom(msg.sender, address(this), amount);
         address pool = pools[ibIn];
         (int128 synthIndex, int128 ibIndex) = _getTokenIndexes(pool, ibIn);
-        amountReceived = CurvePool(pool).exchange(ibIndex, synthIndex, amount, 0, address(this));
+        amountReceived = ICurvePool(pool).exchange(ibIndex, synthIndex, amount, 0, address(this));
         amountReceived = sex.exchangeAtomically(synthId(ibToSynth[ibIn]), amountReceived, synthId(ibToSynth[ibOut]), "Forex");
         pool = pools[ibOut];
         (synthIndex, ibIndex) = _getTokenIndexes(pool, ibOut);
-        amountReceived = CurvePool(pool).exchange(synthIndex, ibIndex, amount, 0, address(this));
+        amountReceived = ICurvePool(pool).exchange(synthIndex, ibIndex, amount, 0, address(this));
         require(amountReceived > minOut, "slippage");
         IERC20(ibOut).safeTransfer(msg.sender, amountReceived);
     }
 
     function _getTokenIndexes(address pool, address ibAsset) internal view returns (int128, int128) {
-        address coin0 = CurvePool(pool).coins(0);
+        address coin0 = ICurvePool(pool).coins(0);
         return coin0 == ibAsset ? (int128(1), int128(0)) : (int128(0), int128(1));
     }
 
