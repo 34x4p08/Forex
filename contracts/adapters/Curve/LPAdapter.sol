@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import "../interfaces/ISynthIBForex.sol";
+import "../../interfaces/ISynthIBForex.sol";
+
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 
@@ -62,7 +63,7 @@ contract LPAdapter {
 
     // Trade LP to synth
     function swapLPToSynth(address lpIn, address synthOut, uint amount, uint minOut) public returns (uint amountReceived) {
-        _safeTransferFrom(lpIn, msg.sender, address(this), amount);
+        IERC20(lpIn).safeTransferFrom(msg.sender, address(this), amount);
         (int128 synthIndex, address synth) = _getSynth(lpIn);
         amountReceived = CurvePool(lpIn).remove_liquidity_one_coin(amount, synthIndex, 0);
         if (synth != synthOut) {
@@ -70,12 +71,12 @@ contract LPAdapter {
             amountReceived = forex.swapSynth(synth, synthOut, amountReceived, minOut);
         }
         require(amountReceived > minOut, "slippage");
-        _safeTransfer(synthOut, msg.sender, amountReceived);
+        IERC20(synthOut).safeTransfer(msg.sender, amountReceived);
     }
 
     // Trade synth to LP
     function swapSynthToLP(address synthIn, address lpOut, uint amount, uint minOut) public returns (uint amountReceived) {
-        _safeTransferFrom(synthIn, msg.sender, address(this), amount);
+        IERC20(synthIn).safeTransferFrom(msg.sender, address(this), amount);
         (int128 synthIndex, address synth) = _getSynth(lpOut);
         IERC20(synthIn).safeApprove(address(forex), type(uint).max);
         amountReceived = forex.swapSynth(synthIn, synth, amount, 0);
@@ -86,17 +87,17 @@ contract LPAdapter {
         amountReceived = CurvePool(lpOut).add_liquidity(amounts, minOut);
 
         require(amountReceived > minOut, "slippage");
-        _safeTransfer(lpOut, msg.sender, amountReceived);
+        IERC20(lpOut).safeTransfer(msg.sender, amountReceived);
     }
 
     // Trade LP to ib
     function swapLPToIB(address lpIn, address ibOut, uint amount, uint minOut) external returns (uint amountReceived) {
-        _safeTransferFrom(lpIn, msg.sender, address(this), amount);
+        IERC20(lpIn).safeTransferFrom(msg.sender, address(this), amount);
         (int128 synthIndex, address synth) = _getSynth(lpIn);
         amountReceived = CurvePool(lpIn).remove_liquidity_one_coin(amount, synthIndex, 0);
         IERC20(synth).safeApprove(address(forex), type(uint).max);
         amountReceived = forex.swapSynthToIB(synth, ibOut, amountReceived, minOut);
-        _safeTransfer(ibOut, msg.sender, amountReceived);
+        IERC20(ibOut).safeTransfer(msg.sender, amountReceived);
     }
 
     // Trade LP to other LP
@@ -111,19 +112,7 @@ contract LPAdapter {
         amountReceived = CurvePool(lpOut).add_liquidity(amounts, minOut);
 
         require(amountReceived > minOut, "slippage");
-        _safeTransfer(lpOut, msg.sender, amountReceived);
-    }
-
-    function _safeTransfer(address token, address to, uint256 value) internal {
-        (bool success, bytes memory data) =
-        token.call(abi.encodeWithSelector(IERC20.transfer.selector, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))));
-    }
-
-    function _safeTransferFrom(address token, address from, address to, uint256 value) internal {
-        (bool success, bytes memory data) =
-        token.call(abi.encodeWithSelector(IERC20.transferFrom.selector, from, to, value));
-        require(success && (data.length == 0 || abi.decode(data, (bool))));
+        IERC20(lpOut).safeTransfer(msg.sender, amountReceived);
     }
 
     function _getSynth(address pool) internal view returns (int128, address) {

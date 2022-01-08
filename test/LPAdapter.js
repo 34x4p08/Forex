@@ -53,14 +53,13 @@ describe("Forex contract", function () {
     susd = await ethers.getContractAt("erc20", susdAddress)
     ibKrw = await ethers.getContractAt("erc20", ibKRWAddress)
 
-    ;[owner, ] = await ethers.getSigners()
+    ;[owner, acc1] = await ethers.getSigners()
 
     forex = await Forex.deploy()
     await forex.deployed()
 
     lpAdapter = await LPAdapter.deploy(forex.address)
     await lpAdapter.deployed()
-
 
     await ethers.provider.send("hardhat_setBalance", [ibEurWhaleAddress, '0x3635c9adc5dea00000' /* 1000Ether */]);
     await ethers.provider.send("hardhat_setBalance", [ibEurLPWhaleAddress, '0x3635c9adc5dea00000' /* 1000Ether */]);
@@ -70,6 +69,11 @@ describe("Forex contract", function () {
     ibEurWhale = await ethers.getSigner(ibEurWhaleAddress)
     ibEurLPWhale = await ethers.getSigner(ibEurLPWhaleAddress)
     susdWhale = await ethers.getSigner(susdWhaleAddress)
+
+    // flush susd balance
+    const balance = await susd.balanceOf(ibEurLPWhaleAddress);
+    if (BigInt(balance) > 0)
+      await susd.connect(ibEurLPWhale).transfer(acc1, balance);
   })
 
   describe("Exchange", function () {

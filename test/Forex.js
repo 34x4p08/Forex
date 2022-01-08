@@ -46,7 +46,7 @@ describe("Forex contract", function () {
     susd = await ethers.getContractAt("erc20", susdAddress)
     ibKrw = await ethers.getContractAt("erc20", ibKRWAddress)
 
-    ;[owner, ] = await ethers.getSigners()
+    ;[owner, acc1] = await ethers.getSigners()
 
     forex = await Forex.deploy()
     await forex.deployed()
@@ -55,6 +55,11 @@ describe("Forex contract", function () {
     await ethers.provider.send("hardhat_setBalance", [ibEurWhaleAddress, '0x3635c9adc5dea00000' /* 1000Ether */]);
     await ethers.provider.send("hardhat_impersonateAccount", [ibEurWhaleAddress])
     ibEurWhale = await ethers.getSigner(ibEurWhaleAddress)
+
+    // flush susd balance
+    const balance = await susd.balanceOf(ibEurWhaleAddress);
+    if (BigInt(balance) > 0)
+      await susd.connect(ibEurWhale).transfer(acc1, balance);
   })
 
   // You can nest describe calls to create subsections.
@@ -81,12 +86,17 @@ describe("Forex contract", function () {
 
   describe("Exchange", function () {
     it("Should swap ibeur to susd", async function () {
+
+      const amountIn = 10_000n * 10n ** 18n
+      const calcOut = await forex.quoteIBToSynth(ibEurAddress, susdAddress, amountIn);
+
       await ethers.provider.send("hardhat_impersonateAccount", [ibEurWhaleAddress])
       ibEurWhale = await ethers.getSigner(ibEurWhaleAddress)
       await ibEur.connect(ibEurWhale).approve(forex.address, ethers.constants.MaxUint256)
-      const amountIn = 10_000n * 10n ** 18n
       await forex.connect(ibEurWhale).swapIBToSynth(ibEurAddress, susdAddress, amountIn, 1n)
       const amountOut = await susd.balanceOf(ibEurWhaleAddress)
+
+      expect(calcOut).to.be.bignumber.equal(amountOut);
 
       console.log('out: ' + Number(BigInt(amountOut) / 10n ** 16n) / 100)
       console.log('rate: ' + Number(BigInt(amountOut) * 100n / amountIn) / 100)
