@@ -26,7 +26,7 @@ describe("Forex contract", function () {
   // A common pattern is to declare some variables, and assign them in the
   // `before` and `beforeEach` callbacks.
 
-  let forex, lpAdapter, mintAgEurAdapter
+  let forex, lpAdapter, angleAdapter
   let owner
   let ibEurWhale
   let ibEurLPWhale
@@ -35,7 +35,7 @@ describe("Forex contract", function () {
   let ibEur
   let ibEurLP
   let ibKrw
-  let susd, usdc, dai, frax, fei, seur
+  let susd, usdc, dai, frax, fei, seur, ageur
 
   const ibEurWhaleAddress = '0xbb3bf20822507c70eafdf11c7469c98fc752ccca'
   const ibEurAddress = '0x96E61422b6A9bA0e068B6c5ADd4fFaBC6a4aae27'
@@ -52,12 +52,20 @@ describe("Forex contract", function () {
   const fraxAddress = '0x853d955acef822db058eb8505911ed77f175b99e'
   const feiAddress = '0x956F47F50A910163D8BF957Cf5846D573E7f87CA'
   const seurAddress = '0xd71ecff9342a5ced620049e616c5035f1db98620'
+  const ageurAddress = '0x1a7e4e63778b4f12a199c062f3efdd288afcbce8'
 
-  const poolManagers = {
-    dai: '0xc9daabc677f3d1301006e723bd21c60be57a5915',
-    usdc: '0xe9f183FC656656f1F17af1F2b0dF79b8fF9ad8eD',
-    fei: '0x53b981389Cfc5dCDA2DC2e903147B5DD0E985F44',
-    frax: '0x6b4eE7352406707003bC6f6b96595FD35925af48',
+  const poolManagers = [
+      '0xc9daabc677f3d1301006e723bd21c60be57a5915',
+      '0xe9f183FC656656f1F17af1F2b0dF79b8fF9ad8eD',
+      '0x53b981389Cfc5dCDA2DC2e903147B5DD0E985F44',
+      '0x6b4eE7352406707003bC6f6b96595FD35925af48'
+  ]
+
+  const poolManagersMap = {
+    [daiAddress]: '0xc9daabc677f3d1301006e723bd21c60be57a5915',
+    [usdcAddress]: '0xe9f183FC656656f1F17af1F2b0dF79b8fF9ad8eD',
+    [feiAddress]: '0x53b981389Cfc5dCDA2DC2e903147B5DD0E985F44',
+    [fraxAddress]: '0x6b4eE7352406707003bC6f6b96595FD35925af48'
   }
 
 
@@ -67,7 +75,7 @@ describe("Forex contract", function () {
     // Get the ContractFactory and Signers here.
     const Forex = await ethers.getContractFactory("SynthIBForex")
     const LPAdapter = await ethers.getContractFactory("LPAdapter")
-    const MintAgEurAdapter = await ethers.getContractFactory("MintAgEurAdapter")
+    const AngleAdapter = await ethers.getContractFactory("AngleAdapter")
     ibEur = await ethers.getContractAt("IERC20", ibEurAddress)
     ibEurLP = await ethers.getContractAt("IERC20", ibEurLPAddress)
     susd = await ethers.getContractAt("IERC20", susdAddress)
@@ -77,6 +85,7 @@ describe("Forex contract", function () {
     frax = await ethers.getContractAt("IERC20", fraxAddress)
     fei = await ethers.getContractAt("IERC20", feiAddress)
     seur = await ethers.getContractAt("IERC20", seurAddress)
+    ageur = await ethers.getContractAt("IERC20", ageurAddress)
 
     ;[owner, acc1] = await ethers.getSigners()
 
@@ -86,8 +95,8 @@ describe("Forex contract", function () {
     lpAdapter = await LPAdapter.deploy(forex.address)
     await lpAdapter.deployed()
 
-    mintAgEurAdapter = await MintAgEurAdapter.deploy(lpAdapter.address)
-    await mintAgEurAdapter.deployed()
+    angleAdapter = await AngleAdapter.deploy(lpAdapter.address, poolManagers)
+    await angleAdapter.deployed()
 
     await ethers.provider.send("hardhat_setBalance", [ibEurWhaleAddress, '0x3635c9adc5dea00000' /* 1000Ether */]);
     await ethers.provider.send("hardhat_setBalance", [usdcWhaleAddress, '0x3635c9adc5dea00000' /* 1000Ether */]);
@@ -109,64 +118,71 @@ describe("Forex contract", function () {
   })
 
   describe("Exchange", function () {
-    // it("Quote stables via Angle mint", async function () {
-    //
-    //   const forUsdc = await calcMint('usdc', 6, susdAddress)
-    //   console.log('usdc -> susd: ' + Number(BigInt(forUsdc) / 10n ** 16n) / 100)
-    //
-    //   const forDai = await calcMint('dai', 18, ibEurAddress)
-    //   console.log('dai -> ibEur: ' + Number(BigInt(forDai) / 10n ** 16n) / 100)
-    //
-    //   const forFei = await calcMint('fei', 18, ethers.constants.AddressZero)
-    //   console.log('fei -> agEur: ' + Number(BigInt(forFei) / 10n ** 16n) / 100)
-    //
-    //   const forFrax = await calcMint('frax', 18, ibEurLPAddress)
-    //   console.log('frax -> ibEurLP: ' + Number(BigInt(forFrax) / 10n ** 16n) / 100)
-    //
-    // })
+    it("Quote stables via Angle mint", async function () {
 
-    it("Exchange stables via Angle mint", async function () {
-      await usdc.connect(usdcWhale).approve(mintAgEurAdapter.address, ethers.constants.MaxUint256)
-      await mintAgEurAdapter.connect(usdcWhale).swapUSDToIB(poolManagers.usdc, 100_000n * 10n ** 6n, ibEurAddress, 0)
-      console.log('usdc -> ibEur: ' + Number(BigInt(await ibEur.balanceOf(usdcWhaleAddress)) / 10n ** 16n) / 100)
+      const forUsdc = await calcMint(usdcAddress, 6, susdAddress)
+      console.log('usdc -> susd: ' + Number(BigInt(forUsdc) / 10n ** 16n) / 100)
 
-      await dai.connect(usdcWhale).approve(mintAgEurAdapter.address, ethers.constants.MaxUint256)
-      await mintAgEurAdapter.connect(usdcWhale).swapUSDToSynth(poolManagers.dai, 100_000n * 10n ** 18n, seurAddress, 0)
-      console.log('dai -> seur: ' + Number(BigInt(await seur.balanceOf(usdcWhaleAddress)) / 10n ** 16n) / 100)
+      const forDai = await calcMint(daiAddress, 18, ibEurAddress)
+      console.log('dai -> ibEur: ' + Number(BigInt(forDai) / 10n ** 16n) / 100)
 
-      await fei.connect(feiWhale).approve(mintAgEurAdapter.address, ethers.constants.MaxUint256)
-      await mintAgEurAdapter.connect(feiWhale).swapUSDToLP(poolManagers.fei, 100_000n * 10n ** 18n, ibEurLPAddress, 0)
-      console.log('fei -> ibEurLP: ' + Number(BigInt(await ibEurLP.balanceOf(feiWhaleAddress)) / 10n ** 16n) / 100)
+      const forFei = await calcMint(feiAddress, 18, ethers.constants.AddressZero)
+      console.log('fei -> agEur: ' + Number(BigInt(forFei) / 10n ** 16n) / 100)
 
-      await frax.connect(fraxWhale).approve(mintAgEurAdapter.address, ethers.constants.MaxUint256)
-      await mintAgEurAdapter.connect(fraxWhale).swapUSDToLP(poolManagers.frax, 100_000n * 10n ** 18n, ibEurLPAddress, 0)
-      console.log('frax -> ibEurLP: ' + Number(BigInt(await ibEurLP.balanceOf(feiWhaleAddress)) / 10n ** 16n) / 100)
+      const forFrax = await calcMint(fraxAddress, 18, ibEurLPAddress)
+      console.log('frax -> ibEurLP: ' + Number(BigInt(forFrax) / 10n ** 16n) / 100)
 
     })
-    // it("Quote stables via Angle burn", async function () {
-    //   const forUsdc = await calcBurn(ibEurAddress,  'usdc')
-    //   console.log('ibEur -> usdc: ' + Number(BigInt(forUsdc) / 10n ** 4n) / 100)
-    //
-    //   const forDai = await calcBurn(ibEurLPAddress,  'dai')
-    //   console.log('ibEurLP -> dai: ' + Number(BigInt(forDai) / 10n ** 16n) / 100)
-    //
-    //   const forFei = await calcBurn(susdAddress,  'fei')
-    //   console.log('susd -> fei: ' + Number(BigInt(forFei) / 10n ** 16n) / 100)
-    //
-    //   const forFrax = await calcBurn(ethers.constants.AddressZero,  'frax')
-    //   console.log('agEur -> frax: ' + Number(BigInt(forFrax) / 10n ** 16n) / 100)
-    //
-    // })
+
+    it("Exchange stables via Angle mint", async function () {
+      await usdc.connect(usdcWhale).approve(angleAdapter.address, ethers.constants.MaxUint256)
+      await angleAdapter.connect(usdcWhale).swapUSDToIB(usdcAddress, ibEurAddress, 100_000n * 10n ** 6n, 0)
+      console.log('usdc -> ibEur: ' + Number(BigInt(await ibEur.balanceOf(usdcWhaleAddress)) / 10n ** 16n) / 100)
+
+      await dai.connect(usdcWhale).approve(angleAdapter.address, ethers.constants.MaxUint256)
+      await angleAdapter.connect(usdcWhale).swapUSDToSynth(daiAddress, seurAddress, 100_000n * 10n ** 18n, 0)
+      console.log('dai -> seur: ' + Number(BigInt(await seur.balanceOf(usdcWhaleAddress)) / 10n ** 16n) / 100)
+
+      await fei.connect(feiWhale).approve(angleAdapter.address, ethers.constants.MaxUint256)
+      await angleAdapter.connect(feiWhale).swapUSDToLP(feiAddress, ibEurLPAddress, 100_000n * 10n ** 18n, 0)
+      console.log('fei -> ibEurLP: ' + Number(BigInt(await ibEurLP.balanceOf(feiWhaleAddress)) / 10n ** 16n) / 100)
+
+      await frax.connect(fraxWhale).approve(angleAdapter.address, ethers.constants.MaxUint256)
+      await angleAdapter.connect(fraxWhale).swapUSDToLP(fraxAddress, ibEurLPAddress, 100_000n * 10n ** 18n, 0)
+      console.log('frax -> ibEurLP: ' + Number(BigInt(await ibEurLP.balanceOf(fraxWhaleAddress)) / 10n ** 16n) / 100)
+
+      await angleAdapter.connect(usdcWhale).mintAgEurForUsd(usdcAddress, 100_000n * 10n ** 6n, 0)
+      console.log('usdc -> agEur: ' + Number(BigInt(await ageur.balanceOf(usdcWhaleAddress)) / 10n ** 16n) / 100)
+
+      await ageur.connect(usdcWhale).approve(angleAdapter.address, ethers.constants.MaxUint256)
+      await angleAdapter.connect(usdcWhale).burnAgEurForUsd(fraxAddress, 50_000n * 10n ** 18n, 0)
+      console.log('agEur -> frax: ' + Number(BigInt(await frax.balanceOf(usdcWhaleAddress)) / 10n ** 16n) / 100)
+    })
+
+    it("Quote stables via Angle burn", async function () {
+      const forUsdc = await calcBurn(ibEurAddress,  usdcAddress)
+      console.log('ibEur -> usdc: ' + Number(BigInt(forUsdc) / 10n ** 4n) / 100)
+
+      const forDai = await calcBurn(ibEurLPAddress,  daiAddress)
+      console.log('ibEurLP -> dai: ' + Number(BigInt(forDai) / 10n ** 16n) / 100)
+
+      const forFei = await calcBurn(susdAddress,  feiAddress)
+      console.log('susd -> fei: ' + Number(BigInt(forFei) / 10n ** 16n) / 100)
+
+      const forFrax = await calcBurn(ethers.constants.AddressZero,  fraxAddress)
+      console.log('agEur -> frax: ' + Number(BigInt(forFrax) / 10n ** 16n) / 100)
+
+    })
   })
 
   calcMint = async (token, decimals, to) => {
-    let inputData = ethers.utils.defaultAbiCoder.encode(["address", "address", "uint256", "address"],[lpAdapter.address, poolManagers[token] , 100_000n * 10n ** BigInt(decimals), to]);
+    let inputData = ethers.utils.defaultAbiCoder.encode(["address", "address", "uint256", "address"],[lpAdapter.address, poolManagersMap[token] , 100_000n * 10n ** BigInt(decimals), to]);
     const payload = bytecodeMint.concat(inputData.slice(2));
     return BigInt(await ethers.provider.call({ data: payload, value: 10_000n * 10n ** 18n }))
   }
 
   calcBurn = async (from, toTokenName) => {
-    let inputData = ethers.utils.defaultAbiCoder.encode(["address", "address", "uint256", "address"],[lpAdapter.address, poolManagers[toTokenName] , 100_000n * 10n ** 18n, from]);
+    let inputData = ethers.utils.defaultAbiCoder.encode(["address", "address", "uint256", "address"],[lpAdapter.address, poolManagersMap[toTokenName], 100_000n * 10n ** 18n, from]);
     const payload = bytecodeBurn.concat(inputData.slice(2));
     return BigInt(await ethers.provider.call({ data: payload, value: 10_000n * 10n ** 18n }))
   }
