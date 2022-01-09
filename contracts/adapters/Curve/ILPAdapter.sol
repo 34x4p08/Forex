@@ -12,4 +12,5 @@ interface ILPAdapter {
     function swapLPToLP ( address lpIn, address lpOut, uint256 amount, uint256 minOut ) external returns ( uint256 amountReceived );
     function swapLPToSynth ( address lpIn, address synthOut, uint256 amount, uint256 minOut ) external returns ( uint256 amountReceived );
     function swapSynthToLP ( address synthIn, address lpOut, uint256 amount, uint256 minOut ) external returns ( uint256 amountReceived );
+    function swapIBToLP ( address ibIn, address lpOut, uint256 amount, uint256 minOut ) external returns ( uint256 amountReceived );
 }

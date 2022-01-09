@@ -6,14 +6,7 @@ import "../../ISynthIBForex.sol";
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import "./ILPAdapter.sol";
-
-interface ICurvePool {
-    function remove_liquidity_one_coin(uint256, int128, uint256) external returns (uint256);
-    function calc_withdraw_one_coin(uint256, int128) external view returns (uint256);
-    function calc_token_amount(uint256[2] calldata, bool) external view returns (uint256);
-    function add_liquidity(uint256[2] calldata, uint256) external returns (uint256);
-    function coins(uint) external view returns (address);
-}
+import "./ICurvePool.sol";
 
 contract LPAdapter is ILPAdapter {
     using SafeERC20 for IERC20;
@@ -74,7 +67,7 @@ contract LPAdapter is ILPAdapter {
         (int128 synthIndex, address synth) = _getSynth(lpIn);
         amountReceived = ICurvePool(lpIn).remove_liquidity_one_coin(amount, synthIndex, 0);
         if (synth != synthOut) {
-            IERC20(synth).safeApprove(forex, type(uint).max);
+            IERC20(synth).safeApprove(forex, amountReceived);
             amountReceived = ISynthIBForex(forex).swapSynth(synth, synthOut, amountReceived, minOut);
         }
         require(amountReceived > minOut, "slippage");
@@ -91,12 +84,34 @@ contract LPAdapter is ILPAdapter {
         if (synthIn == synth) {
             amounts[uint(int(synthIndex))] = amount;
         } else {
-            IERC20(synthIn).safeApprove(forex, type(uint).max);
+            IERC20(synthIn).safeApprove(forex, amount);
             amounts[uint(int(synthIndex))] = ISynthIBForex(forex).swapSynth(synthIn, synth, amount, 0);
         }
 
         IERC20(synth).safeApprove(lpOut, amounts[uint(int(synthIndex))]);
         amountReceived = ICurvePool(lpOut).add_liquidity(amounts, minOut);
+
+        require(amountReceived > minOut, "slippage");
+        IERC20(lpOut).safeTransfer(msg.sender, amountReceived);
+    }
+
+    // Trade ib to LP
+    function swapIBToLP(address ibIn, address lpOut, uint amount, uint minOut) public returns (uint amountReceived) {
+        IERC20(ibIn).safeTransferFrom(msg.sender, address(this), amount);
+        (int128 synthIndex, address synth) = _getSynth(lpOut);
+
+        uint[2] memory amounts;
+
+        if (ISynthIBForex(forex).pools(ibIn) == lpOut) {
+            amounts[synthIndex == 0 ? 1 : 0] = amount;
+            IERC20(ibIn).safeApprove(lpOut, amount);
+        } else {
+            IERC20(ibIn).safeApprove(forex, amount);
+            amounts[uint(int(synthIndex))] = ISynthIBForex(forex).swapIBToSynth(ibIn, synth, amount, 0);
+            IERC20(synth).safeApprove(lpOut, amounts[uint(int(synthIndex))]);
+        }
+
+        amountReceived = ICurvePool(lpOut).add_liquidity(amounts, 0);
 
         require(amountReceived > minOut, "slippage");
         IERC20(lpOut).safeTransfer(msg.sender, amountReceived);
@@ -111,7 +126,7 @@ contract LPAdapter is ILPAdapter {
             amountReceived = ICurvePool(lpIn).remove_liquidity_one_coin(amount, synthIndex == 0 ? int128(1) : int128(0), 0);
         } else {
             amountReceived = ICurvePool(lpIn).remove_liquidity_one_coin(amount, synthIndex, 0);
-            IERC20(synth).safeApprove(forex, type(uint).max);
+            IERC20(synth).safeApprove(forex, amountReceived);
             amountReceived = ISynthIBForex(forex).swapSynthToIB(synth, ibOut, amountReceived, 0);
         }
         require(amountReceived > minOut, "slippage");

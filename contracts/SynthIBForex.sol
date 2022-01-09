@@ -6,6 +6,7 @@ import "./ISynthIBForex.sol";
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import './adapters/Curve/ICurvePool.sol';
 
 interface SynthExchanger {
     function exchangeAtomically(
@@ -29,12 +30,6 @@ interface SynthExchangeViewer {
         uint fee,
         uint exchangeFeeRate
     );
-}
-
-interface ICurvePool {
-    function get_dy(int128, int128, uint) external view returns (uint);
-    function coins(uint) external view returns (address);
-    function exchange(int128, int128, uint, uint, address) external returns (uint);
 }
 
 contract SynthIBForex is ISynthIBForex {
