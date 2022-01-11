@@ -3,7 +3,7 @@ pragma solidity ^0.8.9;
 
 import "./IAnglePoolStorage.sol";
 
-contract PoolStorage is IAnglePoolStorage {
+contract AnglePoolStorage is IAnglePoolStorage {
 
     IStableMasterFront constant public stableMasterFront = IStableMasterFront(0x5adDc89785D75C86aB939E9e15bfBBb7Fc086A87);
 

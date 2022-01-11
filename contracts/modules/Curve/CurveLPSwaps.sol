@@ -13,7 +13,7 @@ library CurveLPSwaps {
     using SafeERC20 for IERC20;
     using Utils for IERC20;
 
-    IPoolStorage public constant poolStorage = IPoolStorage(0x123456787B892f0Aa394AfcC2d7a41a9446f50F7);
+    ISynthIBPoolStorage public constant poolStorage = ISynthIBPoolStorage(0x123456787B892f0Aa394AfcC2d7a41a9446f50F7);
 
     function quoteLPToSynth(address lpIn, address synthOut, uint amount) public view returns (uint amountReceived) {
         (int128 synthIndex, address synth) = _getSynth(lpIn);

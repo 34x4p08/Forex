@@ -3,10 +3,10 @@ pragma solidity ^0.8.9;
 
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol';
-import "./IPoolStorage.sol";
+import "./ISynthIBPoolStorage.sol";
 import "../Curve/ICurvePool.sol";
 
-contract PoolStorage is IPoolStorage {
+contract SynthIBPoolStorage is ISynthIBPoolStorage {
     address public gov = msg.sender;
     // ib-asset to synth analogue
     mapping (address => address) public ibToSynth;
