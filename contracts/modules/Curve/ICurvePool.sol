@@ -8,5 +8,7 @@ interface ICurvePool {
     function add_liquidity(uint256[2] calldata, uint256) external returns (uint256);
     function coins(uint) external view returns (address);
     function get_dy(int128, int128, uint) external view returns (uint);
-    function exchange(int128, int128, uint, uint, address) external returns (uint);
+    function get_dy_underlying(int128, int128, uint) external view returns (uint);
+    function exchange(int128, int128, uint, uint) external returns (uint);
+    function exchange_underlying(int128, int128, uint, uint) external returns (uint);
 }

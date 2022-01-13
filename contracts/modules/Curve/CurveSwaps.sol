@@ -10,25 +10,21 @@ import "../../utils/Utils.sol";
 library CurveSwaps {
     using Utils for IERC20;
 
-    function quote(address assetIn, address assetOut, address pool, uint amount) external view returns (uint) {
-        (int128 indexIn, int128 indexOut) = _getCoinIndexes(pool, assetIn, assetOut);
+    function quote(int128 indexIn, int128 indexOut, address pool, uint amount) external view returns (uint) {
         return ICurvePool(pool).get_dy(indexIn, indexOut, amount);
     }
 
-    function swap(address assetIn, address assetOut, address pool, uint amount) external returns (uint) {
-        (int128 indexIn, int128 indexOut) = _getCoinIndexes(pool, assetIn, assetOut);
-        IERC20(assetIn).ensureExactApproval(pool, amount);
-        return ICurvePool(pool).exchange(indexIn, indexOut, amount, 0, address(this));
+    function quoteUnderlying(int128 indexIn, int128 indexOut, address pool, uint amount) external view returns (uint) {
+        return ICurvePool(pool).get_dy_underlying(indexIn, indexOut, amount);
     }
 
-    function _getCoinIndexes(address pool, address coinIn, address coinOut) internal view returns (int128, int128) {
-        address _coin0 = ICurvePool(pool).coins(0);
-        address _coin1 = ICurvePool(pool).coins(1);
-        if (_coin0 == coinIn && _coin1 == coinOut) {
-            return (int128(0), int128(1));
-        } else if(_coin0 == coinOut && _coin1 == coinIn) {
-            return (int128(1), int128(0));
-        }
-        revert("incorrect pool");
+    function swap(address assetIn, int128 indexIn, int128 indexOut, address pool, uint amount) external returns (uint) {
+        IERC20(assetIn).ensureMaxApproval(pool, amount);
+        return ICurvePool(pool).exchange(indexIn, indexOut, amount, 0);
+    }
+
+    function swapUnderlying(address assetIn, int128 indexIn, int128 indexOut, address pool, uint amount) external returns (uint) {
+        IERC20(assetIn).ensureMaxApproval(pool, amount);
+        return ICurvePool(pool).exchange_underlying(indexIn, indexOut, amount, 0);
     }
 }

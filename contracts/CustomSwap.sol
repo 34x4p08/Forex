@@ -39,7 +39,7 @@ contract CustomSwap {
         return lastResult.toUint256(0);
     }
 
-    function multicall(address[] calldata contracts, bytes[] calldata data) external returns (uint) {
+    function multicall(address[] calldata contracts, bytes[] calldata data, uint minOut) external returns (uint) {
         bytes memory lastResult;
         bytes memory stepData;
         for (uint256 i = 0; i < data.length; i++) {
@@ -67,6 +67,7 @@ contract CustomSwap {
             lastResult = result;
         }
         uint _result = lastResult.toUint256(0);
+        require(_result > minOut, "slippage");
         address lastAssetOut = stepData.slice(36, 32).toAddress(12);
         IERC20(lastAssetOut).safeTransfer(msg.sender, _result);
         return _result;
