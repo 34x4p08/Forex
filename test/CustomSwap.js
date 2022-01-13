@@ -6,6 +6,11 @@
 // We import Chai to use its asserting functions here.
 const { expect } = require("chai")
 const { ethers } = require('hardhat')
+const { utils : { Interface }} = ethers
+
+const synthIBSwapsInterface = new Interface([
+  "function swapSynth(address synthIn, address synthOut, uint amount) internal returns (uint)",
+]);
 
 // `describe` is a Mocha function that allows you to organize your tests. It's
 // not actually needed, but having your tests organized makes debugging them
@@ -24,7 +29,7 @@ describe("Forex contract", function () {
   // A common pattern is to declare some variables, and assign them in the
   // `before` and `beforeEach` callbacks.
 
-  let SynthIBSwaps, CurveLPSwaps, AngleSwaps
+  let SynthIBSwaps, CurveLPSwaps, AngleSwaps, CurveSwaps
   let owner
   let ibEurWhale
   let ibEurLPWhale
@@ -38,6 +43,7 @@ describe("Forex contract", function () {
   let synthIBPoolStorageDeployer
   let synthIBPoolStorage
   let anglePoolStorage
+  let customSwap
 
   const ibEurWhaleAddress = '0xbb3bf20822507c70eafdf11c7469c98fc752ccca'
   const ibEurAddress = '0x96E61422b6A9bA0e068B6c5ADd4fFaBC6a4aae27'
@@ -76,18 +82,26 @@ describe("Forex contract", function () {
   // `beforeEach` will run before each test, re-deploying the contract every
   // time. It receives a callback, which can be async.
   before(async function () {
+    const CurveSwapsLib = await ethers.getContractFactory("CurveSwaps")
+    CurveSwaps = await CurveSwapsLib.deploy()
+    await CurveSwaps.deployed()
     // Get the ContractFactory and Signers here.
-    const SynthIBSwapsContract = await ethers.getContractFactory("SynthIBSwaps")
-
+    const SynthIBSwapsContract = await ethers.getContractFactory("SynthIBSwaps", { libraries: { CurveSwaps: CurveSwaps.address } })
     SynthIBSwaps = await SynthIBSwapsContract.deploy()
     await SynthIBSwaps.deployed()
 
     const CurveLPSwapsContract = await ethers.getContractFactory("CurveLPSwaps", { libraries: { SynthIBSwaps: SynthIBSwaps.address } })
-
     CurveLPSwaps = await CurveLPSwapsContract.deploy()
     await CurveLPSwaps.deployed()
 
-    const AngleSwapsContract = await ethers.getContractFactory("AngleSwaps", { libraries: { SynthIBSwaps: SynthIBSwaps.address, CurveLPSwaps: CurveLPSwaps.address } })
+
+
+    const CustomSwapContract = await ethers.getContractFactory("CustomSwap")
+    customSwap = await CustomSwapContract.deploy()
+    await customSwap.deployed()
+
+
+    const AngleSwapsContract = await ethers.getContractFactory("AngleSwaps")
     const AnglePoolStorage = await ethers.getContractFactory("AnglePoolStorage")
     const SynthIBPoolStorage = await ethers.getContractFactory("SynthIBPoolStorage")
     ibEur = await ethers.getContractAt("IERC20", ibEurAddress)
@@ -139,8 +153,6 @@ describe("Forex contract", function () {
     AngleSwaps = await AngleSwapsContract.deploy()
 
     synthIBPoolStorage = await SynthIBPoolStorage.connect(synthIBPoolStorageDeployer).deploy()
-
-    console.log(AngleSwaps.address)
   })
 
   describe("Exchange", function () {
@@ -150,57 +162,29 @@ describe("Forex contract", function () {
       console.log('usdc -> agEur: ' + Number(BigInt(agEurReceived) / 10n ** 16n) / 100)
 
       const usdcReceived = await AngleSwaps.quoteBurn(usdcAddress, agEurReceived)
+      const contracts = [SynthIBSwaps.address, SynthIBSwaps.address]
       console.log('agEur -> usdc: ' + Number(BigInt(usdcReceived) / 10n ** 4n) / 100)
-
-      // const forDai = await calcMint(daiAddress, 18, ibEurAddress)
-      // console.log('dai -> ibEur: ' + Number(BigInt(forDai) / 10n ** 16n) / 100)
-      //
-      // const forFei = await calcMint(feiAddress, 18, ethers.constants.AddressZero)
-      // console.log('fei -> agEur: ' + Number(BigInt(forFei) / 10n ** 16n) / 100)
-      //
-      // const forFrax = await calcMint(fraxAddress, 18, ibEurLPAddress)
-      // console.log('frax -> ibEurLP: ' + Number(BigInt(forFrax) / 10n ** 16n) / 100)
-
+      let data1 = SynthIBSwaps.interface.encodeFunctionData('quoteSynth', [susdAddress, seurAddress, 1000n * 10n ** 18n])
+      let data2 = SynthIBSwaps.interface.encodeFunctionData('quoteSynth', [seurAddress, susdAddress, 1000n * 10n ** 18n])
+      data2 = data2.substring(0, data2.length - 64)
+      const res = await customSwap.callStatic.viewMulticall(contracts, [data1, data2]);
+      console.log(res)
     })
 
-    it("Exchange stables via Angle mint", async function () {
-      // await usdc.connect(usdcWhale).approve(AngleSwaps.address, ethers.constants.MaxUint256)
-      // await AngleSwaps.connect(usdcWhale).swapUSDToIB(usdcAddress, ibEurAddress, 100_000n * 10n ** 6n, 0)
-      // console.log('usdc -> ibEur: ' + Number(BigInt(await ibEur.balanceOf(usdcWhaleAddress)) / 10n ** 16n) / 100)
-      //
-      // await dai.connect(usdcWhale).approve(AngleSwaps.address, ethers.constants.MaxUint256)
-      // await AngleSwaps.connect(usdcWhale).swapUSDToSynth(daiAddress, seurAddress, 100_000n * 10n ** 18n, 0)
-      // console.log('dai -> seur: ' + Number(BigInt(await seur.balanceOf(usdcWhaleAddress)) / 10n ** 16n) / 100)
-      //
-      // await fei.connect(feiWhale).approve(AngleSwaps.address, ethers.constants.MaxUint256)
-      // await AngleSwaps.connect(feiWhale).swapUSDToLP(feiAddress, ibEurLPAddress, 100_000n * 10n ** 18n, 0)
-      // console.log('fei -> ibEurLP: ' + Number(BigInt(await ibEurLP.balanceOf(feiWhaleAddress)) / 10n ** 16n) / 100)
-      //
-      // await frax.connect(fraxWhale).approve(AngleSwaps.address, ethers.constants.MaxUint256)
-      // await AngleSwaps.connect(fraxWhale).swapUSDToLP(fraxAddress, ibEurLPAddress, 100_000n * 10n ** 18n, 0)
-      // console.log('frax -> ibEurLP: ' + Number(BigInt(await ibEurLP.balanceOf(fraxWhaleAddress)) / 10n ** 16n) / 100)
-      //
-      // await AngleSwaps.connect(usdcWhale).mintAgEurForUsd(usdcAddress, 100_000n * 10n ** 6n, 0)
-      // console.log('usdc -> agEur: ' + Number(BigInt(await ageur.balanceOf(usdcWhaleAddress)) / 10n ** 16n) / 100)
-      //
-      // await ageur.connect(usdcWhale).approve(AngleSwaps.address, ethers.constants.MaxUint256)
-      // await AngleSwaps.connect(usdcWhale).burnAgEurForUsd(fraxAddress, 50_000n * 10n ** 18n, 0)
-      // console.log('agEur -> frax: ' + Number(BigInt(await frax.balanceOf(usdcWhaleAddress)) / 10n ** 16n) / 100)
-    })
+    it("Exchange susd -> seur -> susd", async function () {
+      let data1 = synthIBSwapsInterface.encodeFunctionData('swapSynth', [susdAddress, seurAddress, 1000n * 10n ** 18n])
+      let data2 = synthIBSwapsInterface.encodeFunctionData('swapSynth', [seurAddress, susdAddress, 1000n * 10n ** 18n])
+      data2 = data2.substring(0, data2.length - 64)
+      const contracts = [SynthIBSwaps.address, SynthIBSwaps.address]
 
-    it("Quote stables via Angle burn", async function () {
-      // const forUsdc = await calcBurn(ibEurAddress,  usdcAddress)
-      // console.log('ibEur -> usdc: ' + Number(BigInt(forUsdc) / 10n ** 4n) / 100)
-      //
-      // const forDai = await calcBurn(ibEurLPAddress,  daiAddress)
-      // console.log('ibEurLP -> dai: ' + Number(BigInt(forDai) / 10n ** 16n) / 100)
-      //
-      // const forFei = await calcBurn(susdAddress,  feiAddress)
-      // console.log('susd -> fei: ' + Number(BigInt(forFei) / 10n ** 16n) / 100)
-      //
-      // const forFrax = await calcBurn(ethers.constants.AddressZero,  fraxAddress)
-      // console.log('agEur -> frax: ' + Number(BigInt(forFrax) / 10n ** 16n) / 100)
+      const before = BigInt(await susd.balanceOf(susdWhaleAddress))
+      await susd.connect(susdWhale).approve(customSwap.address, ethers.constants.MaxUint256)
+      const tx = await customSwap.connect(susdWhale).multicall(contracts, [data1, data2]);
+      const after = BigInt(await susd.balanceOf(susdWhaleAddress))
+      console.log({before, after})
+      console.log(Number((1000n * 10n ** 18n - (before - after)) / 10n ** 16n ) / 100)
 
+      console.log((await tx.wait()).gasUsed)
     })
   })
 })

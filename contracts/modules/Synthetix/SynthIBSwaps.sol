@@ -75,14 +75,14 @@ library SynthIBSwaps {
     }
 
     // Trade synth to synth
-    function swapSynth(address synthIn, address synthOut, uint amount) internal returns (uint amountReceived) {
+    function swapSynth(address synthIn, address synthOut, uint amount) public returns (uint amountReceived) {
         if (synthIn == synthOut) return amount;
         IERC20(synthIn).ensureMaxApproval(address(sex), amount);
         amountReceived = sex.exchangeAtomically(synthId(synthIn), amount, synthId(synthOut), "Forex");
     }
 
     // Trade synth to ib
-    function swapSynthToIB(address synthIn, address ibOut, uint amount) internal returns (uint) {
+    function swapSynthToIB(address synthIn, address ibOut, uint amount) public returns (uint) {
         address _swapSynth = poolStorage.ibToSynth(ibOut);
         if (_swapSynth != synthIn) {
             IERC20(synthIn).ensureMaxApproval(address(sex), amount);
@@ -92,7 +92,7 @@ library SynthIBSwaps {
     }
 
     // Trade ib to synth
-    function swapIBToSynth(address ibIn, address synthOut, uint amount) internal returns (uint amountReceived) {
+    function swapIBToSynth(address ibIn, address synthOut, uint amount) public returns (uint amountReceived) {
         address _swapSynth = poolStorage.ibToSynth(ibIn);
         amountReceived = CurveSwaps.swap(ibIn, _swapSynth, poolStorage.pools(ibIn), amount);
         if (_swapSynth != synthOut) {
@@ -102,7 +102,7 @@ library SynthIBSwaps {
     }
 
     // Trade ib to ib
-    function swapIB(address ibIn, address ibOut, uint amount) internal returns (uint amountReceived) {
+    function swapIB(address ibIn, address ibOut, uint amount) public returns (uint amountReceived) {
         if (ibIn == ibOut) return amount;
         address _swapSynth = poolStorage.ibToSynth(ibOut);
         amountReceived = swapIBToSynth(ibIn, _swapSynth, amount);
